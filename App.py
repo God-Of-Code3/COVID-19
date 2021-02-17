@@ -4,7 +4,7 @@ from PyQt5 import QtWidgets, QtCore
 from PyQt5.QtWidgets import (QMainWindow, QTextEdit,
                              QAction, QFileDialog, QApplication,
                              QPushButton, QLabel, QMessageBox,
-                             QHBoxLayout, QScrollArea)
+                             QSlider)
 from PyQt5.QtGui import QIcon, QPixmap
 from PyQt5.QtCore import Qt
 
@@ -14,8 +14,8 @@ import nibabel as nib
 from Test import testFiles
 
 
-WNDW_SZ = (800, 400)
-WNDW_MAX_SZ = (1600, 800)
+WNDW_SZ = (500, 400)
+WNDW_MAX_SZ = (1920, 600)
 BTN_SZ = (100, 25)
 IMG_SZ = (100, 100)
 
@@ -72,13 +72,21 @@ class Example(QMainWindow):
         self.labels = [0] * 20
         self.image_ways = []
         self.paths = []
-        self.names = []       
+        self.names = []
+        self.mnoi = 6
+        self.visible_labels = []
         
         self.test = QPushButton('Test scans', self)
         self.test.resize(*BTN_SZ)
         self.test.clicked.connect(self.testFiles)
         
+        self.slider = None
+        self.value = 0
+        
         self.show()
+        
+    def changeValue(self, value):
+        self.value = value - 1
         
     def testFiles(self):
         if self.image_ways:
@@ -102,31 +110,59 @@ class Example(QMainWindow):
         width = self.frameGeometry().width()
         height = self.frameGeometry().height()        
         
-        lbls = [i for i in self.labels if i != 0]
+        lbls = [i for i in self.visible_labels]
         start = (width - len(lbls) * IMG_SZ[0] * 6 / 5) / 2 + IMG_SZ[0] / 10
+        num_of_imgs = len([i for i in self.labels if i != 0])
         
-        for i in range(len(lbls)):
-            x = int(start + i * (IMG_SZ[0] * 6 / 5))
-            y = int(IMG_SZ[1] + 20)
-            index = self.labels.index(lbls[i])
-            
-            self.labels[index][0].move(x, y)
-            self.labels[index][0].show()
+        if lbls and not self.slider:
+            self.slider = QSlider(Qt.Horizontal, self)
+            self.slider.valueChanged[int].connect(self.changeValue)
+            self.slider.setFocusPolicy(Qt.StrongFocus)
+            self.slider.setTickInterval(1)
+            self.slider.setTickPosition(QSlider.TicksBothSides)
+            self.slider.setSingleStep(1)
+        elif not lbls:
+            if self.slider:
+                self.slider.hide()
+                self.slider = None
+            self.loading.setText('You need to select files to continue')
+        elif self.mnoi >= num_of_imgs and self.slider:
+            self.slider.hide()
+            self.slider = None
+        
+        if self.slider:
+            self.slider.setRange(1, (num_of_imgs - 1) // self.mnoi + 1)
+        
+        if lbls:
+            for i in range(len(lbls)):
+                x = int(start + i * (IMG_SZ[0] * 6 / 5))
+                y = int(IMG_SZ[1] + 20)
+                index = self.visible_labels.index(lbls[i])
                 
-            self.labels[index][1].move(int(x + IMG_SZ[0] * 4 / 5), y)
-            self.labels[index][1].show()
-            
-            self.labels[index][3].resize(IMG_SZ[0], IMG_SZ[1])
-            self.labels[index][3].move(x, int(y - IMG_SZ[1]))
-            self.labels[index][3].show()
-            
-            self.labels[index][4].resize(IMG_SZ[0], int(IMG_SZ[1] / 2))
-            self.labels[index][4].move(x, int(y + IMG_SZ[1]))
-            self.labels[index][4].show()            
+                self.visible_labels[index][0].move(x, y)
+                self.visible_labels[index][0].show()
+                    
+                self.visible_labels[index][1].move(int(x + IMG_SZ[0] * 4 / 5), y)
+                self.visible_labels[index][1].show()
+                
+                h = len(self.visible_labels[index][3].text().split('\n'))
+                self.visible_labels[index][3].resize(IMG_SZ[0], IMG_SZ[1])
+                self.visible_labels[index][3].move(x, int(y - (h + 8) * 7))
+                self.visible_labels[index][3].show()
+                
+                self.visible_labels[index][4].resize(IMG_SZ[0], int(IMG_SZ[1] / 2))
+                self.visible_labels[index][4].move(x, int(y + IMG_SZ[1]))
+                self.visible_labels[index][4].show()            
     
     def paintEvent(self, event):
         width = self.frameGeometry().width()
         height = self.frameGeometry().height()
+        
+        self.mnoi = int(width // (IMG_SZ[0] * 6 / 5))
+        if self.slider:
+            self.slider.setGeometry(40,  height - BTN_SZ[1] * 2 - 80,
+                                    width - 80, BTN_SZ[1])            
+            self.slider.show()
         
         self.test.move(int(width - BTN_SZ[0] * 5 / 4),
                        int(height - BTN_SZ[1] * 3))        
@@ -135,6 +171,15 @@ class Example(QMainWindow):
         self.loading.move(int(BTN_SZ[0] * 3 / 2),
                           int(height - BTN_SZ[1] * 3))
         self.loading.resize(int(width - BTN_SZ[0] * 3), BTN_SZ[1])
+        
+        for i in range(len(self.visible_labels)):
+            self.visible_labels[i][0].hide()
+            self.visible_labels[i][1].hide()
+            self.visible_labels[i][3].hide()
+            self.visible_labels[i][4].hide()
+        existing = [i for i in self.labels if i != 0]
+        self.visible_labels = existing[self.value: self.mnoi + self.value]
+        
         self.alignImages()
                 
     def deleteImage(self):
@@ -211,15 +256,11 @@ class Example(QMainWindow):
                     
                     self.labels[j][0].setPixmap(pixmap)
                     self.labels[j][0].resize(*IMG_SZ)
-                    self.labels[j][0].show()
-                    
                     self.labels[j][1].resize(int(IMG_SZ[0] / 5),
                                              int(IMG_SZ[1] / 5))
                     self.labels[j][1].clicked.connect(self.deleteImage)
-                    self.labels[j][1].show()
-                    
-                    self.labels[j][3].show()
                     break
+        
         if empty:
             self.loading.setText('Already uploaded files were ignored')
         else:
