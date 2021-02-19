@@ -22,7 +22,7 @@ IMG_SZ = (100, 100)
 
 def openFile(way, images):
     name = "data/" + way.split('/')[-1].split('.')[0] + ".png"
-    if os.path.exists(name):
+    if name in images:
         return False
     else:
         img = nib.load(way)
@@ -35,9 +35,8 @@ def openFile(way, images):
                 value = (array[x * 2][y * 2][0] + 2048) // 16
                 value = int(min(255, value))
                 image.putpixel((x, y), (value, value, value))
-        name = "data/" + way.split('/')[-1].split('.')[0] + ".png"
         image.save(name, "PNG")
-        return name        
+        return name       
 
 
 class Example(QMainWindow):
@@ -54,14 +53,14 @@ class Example(QMainWindow):
         self.setGeometry(300, 300, *WNDW_SZ)
         self.setWindowTitle('Definition of infection COVID-19')
  
-        openFile = QAction('Settings', self)
+        '''openFile = QAction('Settings', self)
         openFile.setShortcut('Ctrl+S')
         openFile.setStatusTip('Open Settings window')
         openFile.triggered.connect(self.showSettings)
  
         menubar = self.menuBar()
         fileMenu = menubar.addMenu('File')
-        fileMenu.addAction(openFile)
+        fileMenu.addAction(openFile)'''
         
         self.button = QPushButton('Select files', self)
         self.button.resize(*BTN_SZ)
@@ -87,6 +86,11 @@ class Example(QMainWindow):
         
     def changeValue(self, value):
         self.value = value - 1
+        for i in range(len(self.visible_labels)):
+            if self.visible_labels[i][1].isVisible:
+	
+                self.visible_labels[i][1].hide()        
+        self.recreateImages()
         
     def testFiles(self):
         if self.image_ways:
@@ -97,12 +101,14 @@ class Example(QMainWindow):
                         index = j
                         break
                 
-                data = str(results[i][1]) + '\n' + str(results[i][2])
-
-                if results[i][0] == 1:
-                    self.labels[index][4].setText('Sick' + '\n' + data)
+                if results[i] == 1:
+                    self.labels[index][4].setText('Sick')
                 else:
-                    self.labels[index][4].setText('Health' + '\n' + data)
+                    self.labels[index][4].setText('Health')
+                self.loading.setText(str(i + 1) + '/' + str(len(results)))
+                QApplication.processEvents()
+            self.loading.setText('Scans tested')
+            self.loading.update()
         else:
             self.loading.setText('First you need to select files')
         
@@ -112,7 +118,7 @@ class Example(QMainWindow):
         
         lbls = [i for i in self.visible_labels]
         start = (width - len(lbls) * IMG_SZ[0] * 6 / 5) / 2 + IMG_SZ[0] / 10
-        num_of_imgs = len([i for i in self.labels if i != 0])
+        num_of_imgs = len([i for i in self.labels if i != 0])        
         
         if lbls and not self.slider:
             self.slider = QSlider(Qt.Horizontal, self)
@@ -125,13 +131,13 @@ class Example(QMainWindow):
             if self.slider:
                 self.slider.hide()
                 self.slider = None
-            self.loading.setText('You need to select files to continue')
+            if self.loading.text() != 'First you need to select files':
+                self.loading.setText('You need to select files to continue')
         elif self.mnoi >= num_of_imgs and self.slider:
             self.slider.hide()
             self.slider = None
-        
-        if self.slider:
-            self.slider.setRange(1, (num_of_imgs - 1) // self.mnoi + 1)
+        elif self.slider:
+            self.slider.setRange(1, num_of_imgs - (self.mnoi - 1))
         
         if lbls:
             for i in range(len(lbls)):
@@ -141,7 +147,7 @@ class Example(QMainWindow):
                 
                 self.visible_labels[index][0].move(x, y)
                 self.visible_labels[index][0].show()
-                    
+                
                 self.visible_labels[index][1].move(int(x + IMG_SZ[0] * 4 / 5), y)
                 self.visible_labels[index][1].show()
                 
@@ -150,15 +156,16 @@ class Example(QMainWindow):
                 self.visible_labels[index][3].move(x, int(y - (h + 8) * 7))
                 self.visible_labels[index][3].show()
                 
+                w = len(self.visible_labels[index][4].text()) * 4
                 self.visible_labels[index][4].resize(IMG_SZ[0], int(IMG_SZ[1] / 2))
-                self.visible_labels[index][4].move(x, int(y + IMG_SZ[1]))
-                self.visible_labels[index][4].show()            
+                self.visible_labels[index][4].move(int(x + (IMG_SZ[1] - w) / 2),
+                                                   int(y + IMG_SZ[1]))
+                self.visible_labels[index][4].show()
     
     def paintEvent(self, event):
         width = self.frameGeometry().width()
         height = self.frameGeometry().height()
         
-        self.mnoi = int(width // (IMG_SZ[0] * 6 / 5))
         if self.slider:
             self.slider.setGeometry(40,  height - BTN_SZ[1] * 2 - 80,
                                     width - 80, BTN_SZ[1])            
@@ -168,19 +175,22 @@ class Example(QMainWindow):
                        int(height - BTN_SZ[1] * 3))        
         self.button.move(int(BTN_SZ[0] / 4),
                          int(height - BTN_SZ[1] * 3))
-        self.loading.move(int(BTN_SZ[0] * 3 / 2),
+        self.loading.move(int(BTN_SZ[0] * 3 / 2 - 10),
                           int(height - BTN_SZ[1] * 3))
         self.loading.resize(int(width - BTN_SZ[0] * 3), BTN_SZ[1])
         
+        self.mnoi = int(width // (IMG_SZ[0] * 6 / 5))
+        self.recreateImages()
+        self.alignImages()
+        
+    def recreateImages(self):
         for i in range(len(self.visible_labels)):
             self.visible_labels[i][0].hide()
-            self.visible_labels[i][1].hide()
             self.visible_labels[i][3].hide()
             self.visible_labels[i][4].hide()
+        
         existing = [i for i in self.labels if i != 0]
         self.visible_labels = existing[self.value: self.mnoi + self.value]
-        
-        self.alignImages()
                 
     def deleteImage(self):
         sender = self.sender()
@@ -215,30 +225,43 @@ class Example(QMainWindow):
         n = 0
         for way in data:
             n += 1
-            self.loading.setText(str(n) + '/' + str(len(data)))
-            self.loading.show()
-            
-            filename = openFile(way, self.image_ways)
-            if not filename:
-                ignored = ' (already uploaded files were ignored)'
+            error = ''
+            try:
+                if way[-7:] != '.nii.gz':
+                    os.rename(way, way + '.nii.gz')
+                    way += '.nii.gz'
+                filename = openFile(way, self.image_ways)
+            except Exception:
+                error = ' (error opening file)'
             else:
-                self.image_ways.append(filename)
-                self.paths.append(way)
-                
-                name = way.split('/')[-1].split('.')[0]
-                nm_lbl = QLabel(name, self)
-                width = nm_lbl.fontMetrics().boundingRect(nm_lbl.text()).width()
-                k = len(name) // ((width - 1) // IMG_SZ[0] + 1)
-                name = [name[i - k:i] for i in range(k, len(name) + 1, k)]
-                nm_lbl.setText('\n'.join(name))
-                self.names.append(nm_lbl)
-                
-                empty = False
+                if not filename:
+                    ignored = ' (already uploaded files were ignored)'
+                else:
+                    self.image_ways.append(filename)
+                    self.paths.append(way)
+                    
+                    name = way.split('/')[-1].split('.')[0]
+                    nm_lbl = QLabel(name, self)
+                    width = nm_lbl.fontMetrics().boundingRect(nm_lbl.text()).width()
+                    k = len(name) // ((width - 1) // IMG_SZ[0] + 1)
+                    name = [name[i - k:i] for i in range(k, len(name) + 1, k)]
+                    nm_lbl.setText('\n'.join(name))
+                    self.names.append(nm_lbl)
+                    
+                    empty = False
+            
+            self.loading.setText(str(n) + '/' + str(len(data)) + error)
+            QApplication.processEvents()
+        
+        result = []
         for i in range(len(self.labels)):
             if self.labels[i] != 0:
+                if self.labels[i][4].text():
+                    result.append((self.labels[i][3], self.labels[i][4].text()))
                 self.labels[i][0].hide()
                 self.labels[i][1].hide()
                 self.labels[i][3].hide()
+                self.labels[i][4].hide()
                 self.labels[i] = 0
         for i in range(len(self.image_ways)):
             pixmap = QPixmap(self.image_ways[i])
@@ -261,14 +284,23 @@ class Example(QMainWindow):
                     self.labels[j][1].clicked.connect(self.deleteImage)
                     break
         
+        for i in range(len(result)):
+            for j in range(len(self.labels)):
+                if self.labels[j] != 0 and self.labels[j][3] == result[i][0]:
+                    index = j
+            self.labels[index][4].setText(result[i][1])
+        
         if empty:
             self.loading.setText('Already uploaded files were ignored')
         else:
             self.loading.setText('Files uploaded' + ignored)
         self.loading.show()
         
-    def showSettings(self):
-        print('settings')
+        self.recreateImages()
+        self.alignImages()
+        
+    '''def showSettings(self):
+        print('settings')'''
         
     def closeEvent(self, event):
         reply = QMessageBox.question(self, 'Exit',
